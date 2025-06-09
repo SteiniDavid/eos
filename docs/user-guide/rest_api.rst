@@ -6,6 +6,7 @@ Example functions include:
 * Submit tasks, experiments, and campaigns, as well as cancel them
 * Load, unload, and reload experiments and laboratories
 * Get the status of tasks, experiments, and campaigns
+* List experiments with optional filters to retrieve experiment IDs
 * Download task output files
 
 .. warning::

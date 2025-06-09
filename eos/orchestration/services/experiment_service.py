@@ -42,6 +42,10 @@ class ExperimentService:
         """Get an experiment by its unique identifier."""
         return await self._experiment_manager.get_experiment(db, experiment_id)
 
+    async def get_experiments(self, db: AsyncDbSession, **filters: Any) -> list[Experiment]:
+        """Get all experiments matching the provided filters."""
+        return await self._experiment_manager.get_experiments(db, **filters)
+
     async def submit_experiment(
         self,
         db: AsyncDbSession,

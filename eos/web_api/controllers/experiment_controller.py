@@ -46,6 +46,19 @@ class ExperimentController(Controller):
 
         return experiment
 
+    @get("/")
+    async def list_experiments(
+        self,
+        db: AsyncDbSession,
+        orchestrator: Orchestrator,
+        status: str | None = None,
+    ) -> list[Experiment]:
+        """List experiments filtered by optional status."""
+        filters: dict[str, Any] = {}
+        if status:
+            filters["status"] = status
+        return await orchestrator.experiments.get_experiments(db, **filters)
+
     @get("/types")
     async def get_experiment_types(self, orchestrator: Orchestrator) -> dict[str, bool]:
         """List experiment types."""
