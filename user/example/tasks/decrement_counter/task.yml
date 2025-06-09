@@ -1,0 +1,18 @@
+type: Decrement Counter
+desc: Decrement a stateful counter device
+
+device_types:
+  - stateful_counter
+
+input_parameters:
+  amount:
+    type: int
+    unit: none
+    value: 1
+    desc: Amount to decrement the counter
+
+output_parameters:
+  value:
+    type: int
+    unit: none
+    desc: The updated counter value

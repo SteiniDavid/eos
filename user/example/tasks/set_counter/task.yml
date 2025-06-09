@@ -1,0 +1,18 @@
+type: Set Counter
+desc: Set the counter to a specific value
+
+device_types:
+  - stateful_counter
+
+input_parameters:
+  value:
+    type: int
+    unit: none
+    value: 0
+    desc: The new counter value
+
+output_parameters:
+  value:
+    type: int
+    unit: none
+    desc: The updated counter value

@@ -109,3 +109,282 @@ The ``mix`` function:
 
 * Sends a command to lower-level driver with a specified mixing time and speed to operate the magnetic mixer
 * Updates container metadata with mixing details
+
+Device State Management with Dataclasses
+---------------------------------------
+When a device needs to keep track of state between calls, a convenient way is to
+store that state in a :mod:`dataclasses.dataclass`.  The dataclass instance can be
+stored as an attribute of the device and exposed through device methods so tasks
+or external processes can query or update it.
+
+Here is a minimal example device that counts how many times it has been called:
+
+:bdg-primary:`device.py`
+
+.. code-block:: python
+
+    from dataclasses import dataclass
+    from typing import Any
+
+    from eos.devices.base_device import BaseDevice
+
+
+    @dataclass
+    class CounterState:
+        value: int = 0
+
+
+    class StatefulCounter(BaseDevice):
+        async def _initialize(self, init_parameters: dict[str, Any]) -> None:
+            self.state = CounterState(value=int(init_parameters.get("initial", 0)))
+
+        async def _cleanup(self) -> None:
+            pass
+
+        async def _report(self) -> dict[str, Any]:
+            return {"value": self.state.value}
+
+        def increment(self, amount: int = 1) -> int:
+            self.state.value += amount
+            return self.state.value
+
+        def decrement(self, amount: int = 1) -> int:
+            self.state.value -= amount
+            return self.state.value
+
+        def get_state(self) -> dict[str, Any]:
+            return {"value": self.state.value}
+
+        def set_state(self, value: int) -> None:
+            self.state.value = int(value)
+
+        def apply_operations(self, ops: list[dict[str, int]]) -> int:
+            for op in ops:
+                action = op.get("action")
+                if action == "increment":
+                    self.increment(int(op.get("amount", 1)))
+                elif action == "decrement":
+                    self.decrement(int(op.get("amount", 1)))
+                elif action == "set":
+                    self.set_state(int(op.get("value", 0)))
+            return self.state.value
+
+
+Interacting via the REST API
+---------------------------
+The current state of a device can be retrieved using the ``/labs/{lab_id}/device/{device_id}/report``
+endpoint of the REST API. For the ``StatefulCounter`` example the request looks like:
+
+.. code-block:: bash
+
+    curl http://localhost:8070/api/labs/counter_lab/device/counter/report
+
+To update the state externally, create a small task that calls ``increment`` on the device and
+submit it through the ``/tasks`` API. Below is such a task:
+
+:bdg-primary:`task.py`
+
+.. code-block:: python
+
+    from eos.tasks.base_task import BaseTask
+
+
+    class IncrementCounter(BaseTask):
+        async def _execute(
+            self,
+            devices: BaseTask.DevicesType,
+            parameters: BaseTask.ParametersType,
+            containers: BaseTask.ContainersType,
+        ) -> BaseTask.OutputType:
+            counter = devices.get_all_by_type("stateful_counter")[0]
+            new_value = counter.increment(parameters["amount"])
+            return {"value": new_value}, None, None
+
+:bdg-primary:`task.yml`
+
+.. code-block:: yaml
+
+    type: Increment Counter
+    desc: Increment a stateful counter device
+
+    device_types:
+      - stateful_counter
+
+    input_parameters:
+      amount:
+        type: int
+        unit: none
+        value: 1
+        desc: Amount to increment the counter
+
+    output_parameters:
+      value:
+        type: int
+        unit: none
+        desc: The updated counter value
+
+Submit the task with ``curl``:
+
+.. code-block:: bash
+
+    curl -X POST http://localhost:8070/api/tasks \
+         -H "Content-Type: application/json" \
+        -d '{
+              "id": "inc1",
+              "type": "Increment Counter",
+              "devices": [{"lab_id": "counter_lab", "id": "counter"}],
+              "input_parameters": {"amount": 5}
+         }'
+
+Similar tasks can be defined for decrementing or directly setting the counter
+value.
+
+:bdg-primary:`decrement_counter/task.py`
+
+.. code-block:: python
+
+    from eos.tasks.base_task import BaseTask
+
+
+    class DecrementCounter(BaseTask):
+        async def _execute(
+            self,
+            devices: BaseTask.DevicesType,
+            parameters: BaseTask.ParametersType,
+            containers: BaseTask.ContainersType,
+        ) -> BaseTask.OutputType:
+            counter = devices.get_all_by_type("stateful_counter")[0]
+            new_value = counter.decrement(parameters["amount"])
+            return {"value": new_value}, None, None
+
+:bdg-primary:`decrement_counter/task.yml`
+
+.. code-block:: yaml
+
+    type: Decrement Counter
+    desc: Decrement a stateful counter device
+
+    device_types:
+      - stateful_counter
+
+    input_parameters:
+      amount:
+        type: int
+        unit: none
+        value: 1
+        desc: Amount to decrement the counter
+
+    output_parameters:
+      value:
+        type: int
+        unit: none
+        desc: The updated counter value
+
+:bdg-primary:`set_counter/task.py`
+
+.. code-block:: python
+
+    from eos.tasks.base_task import BaseTask
+
+
+    class SetCounter(BaseTask):
+        async def _execute(
+            self,
+            devices: BaseTask.DevicesType,
+            parameters: BaseTask.ParametersType,
+            containers: BaseTask.ContainersType,
+        ) -> BaseTask.OutputType:
+            counter = devices.get_all_by_type("stateful_counter")[0]
+            counter.set_state(parameters["value"])
+            return {"value": counter.get_state()["value"]}, None, None
+
+:bdg-primary:`set_counter/task.yml`
+
+.. code-block:: yaml
+
+    type: Set Counter
+    desc: Set the counter to a specific value
+
+    device_types:
+      - stateful_counter
+
+    input_parameters:
+      value:
+        type: int
+        unit: none
+        value: 0
+        desc: The new counter value
+
+    output_parameters:
+      value:
+        type: int
+        unit: none
+        desc: The updated counter value
+
+Batch Updating State
+~~~~~~~~~~~~~~~~~~~~
+When you need to apply several actions in one API call, you can provide a list
+of operations to a single task:
+
+:bdg-primary:`batch_update_counter/task.py`
+
+.. code-block:: python
+
+    from eos.tasks.base_task import BaseTask
+
+
+    class BatchUpdateCounter(BaseTask):
+        async def _execute(
+            self,
+            devices: BaseTask.DevicesType,
+            parameters: BaseTask.ParametersType,
+            containers: BaseTask.ContainersType,
+        ) -> BaseTask.OutputType:
+            counter = devices.get_all_by_type("stateful_counter")[0]
+            new_value = counter.apply_operations(parameters["operations"])
+            return {"value": new_value}, None, None
+
+:bdg-primary:`batch_update_counter/task.yml`
+
+.. code-block:: yaml
+
+    type: Batch Update Counter
+    desc: Apply multiple operations to the counter in one call
+
+    device_types:
+      - stateful_counter
+
+    input_parameters:
+      operations:
+        type: list
+        element_type: dict
+        value: []
+        desc: |
+          List of operations. Each entry should have an "action" key
+          (``increment``, ``decrement`` or ``set``) and an appropriate amount or
+          value.
+
+    output_parameters:
+      value:
+        type: int
+        unit: none
+        desc: The updated counter value
+
+Submit the task with ``curl``:
+
+.. code-block:: bash
+
+    curl -X POST http://localhost:8070/api/tasks \
+         -H "Content-Type: application/json" \
+        -d '{
+              "id": "batch1",
+              "type": "Batch Update Counter",
+              "devices": [{"lab_id": "counter_lab", "id": "counter"}],
+              "input_parameters": {
+                "operations": [
+                  {"action": "increment", "amount": 2},
+                  {"action": "decrement", "amount": 1},
+                  {"action": "set", "value": 10}
+                ]
+              }
+         }'

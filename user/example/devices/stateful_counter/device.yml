@@ -1,0 +1,5 @@
+type: stateful_counter
+desc: Simple counter device with externally managed state
+
+init_parameters:
+  initial: 0
