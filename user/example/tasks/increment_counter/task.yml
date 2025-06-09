@@ -1,0 +1,18 @@
+type: Increment Counter
+desc: Increment a stateful counter device
+
+device_types:
+  - stateful_counter
+
+input_parameters:
+  amount:
+    type: int
+    unit: none
+    value: 1
+    desc: Amount to increment the counter
+
+output_parameters:
+  value:
+    type: int
+    unit: none
+    desc: The updated counter value

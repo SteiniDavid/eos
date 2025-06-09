@@ -1,0 +1,20 @@
+type: Batch Update Counter
+desc: Apply multiple operations to the counter in one call
+
+device_types:
+  - stateful_counter
+
+input_parameters:
+  operations:
+    type: list
+    element_type: dict
+    value: []
+    desc: |
+      List of operations. Each entry should have an "action" key (increment,
+      decrement, set) and an "amount" or "value".
+
+output_parameters:
+  value:
+    type: int
+    unit: none
+    desc: The updated counter value

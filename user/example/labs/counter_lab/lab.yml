@@ -1,0 +1,9 @@
+type: counter_lab
+desc: Example lab with a stateful counter
+
+devices:
+  counter:
+    type: stateful_counter
+    computer: eos_computer
+    init_parameters:
+      initial: 0
